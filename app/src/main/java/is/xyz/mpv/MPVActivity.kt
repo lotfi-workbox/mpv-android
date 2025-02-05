@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package `is`.xyz.mpv
 
 import `is`.xyz.mpv.databinding.PlayerBinding
@@ -47,6 +49,8 @@ import androidx.media.AudioFocusRequestCompat
 import androidx.media.AudioManagerCompat
 import java.io.File
 import java.lang.IllegalArgumentException
+import java.util.Timer
+import java.util.TimerTask
 import kotlin.math.roundToInt
 
 typealias ActivityResultCallback = (Int, Intent?) -> Unit
@@ -84,12 +88,40 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
     // convenience alias
     private val player get() = binding.player
 
+    private val SEEK_BAR_TIMEOUT = 5000L // 5 seconds
+    private var lastSystemChangeTime: Long = 0
+    private val handler = Handler(Looper.getMainLooper())
+
+    // Flags to determine if the change was made by the system or user
+    private var isSystemChange = true
+    private var isSeekBarChanged = false // Tracks if SeekBar was changed
+
+    // Define a Runnable to execute after 5 seconds of inactivity (only once)
+    private val inactivityRunnable = Runnable {
+        // Code to execute after 5 seconds of inactivity
+        onNoSignal() // Replace with the actual action you want to trigger
+    }
+
     private val seekBarChangeListener = object : SeekBar.OnSeekBarChangeListener {
         override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-            if (!fromUser)
-                return
-            player.timePos = progress.toDouble() / SEEK_BAR_PRECISION
-            // Note: don't call updatePlaybackPos() here either
+            if (fromUser) {
+                // Reset system change flag and last system change time when user interacts
+                isSystemChange = false
+                lastSystemChangeTime = System.currentTimeMillis()
+
+                // Remove any pending inactivity actions (in case user interacts again)
+                handler.removeCallbacks(inactivityRunnable)
+            } else {
+                // Track when the system changes the SeekBar position
+                isSystemChange = true
+                lastSystemChangeTime = System.currentTimeMillis()
+
+                // Optionally, you can update the SeekBar or player position here
+                player.timePos = progress.toDouble() / SEEK_BAR_PRECISION
+            }
+
+            // Handle SeekBar change (only once)
+            handleSeekBarChange()
         }
 
         override fun onStartTrackingTouch(seekBar: SeekBar) {
@@ -100,6 +132,49 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
             userIsOperatingSeekbar = false
             showControls() // re-trigger display timeout
         }
+    }
+
+    // Handle SeekBar change action (only once after change)
+    private fun handleSeekBarChange() {
+        if (!isSeekBarChanged) {
+            isSeekBarChanged = true
+            onSignal() // Trigger the action you want to perform once after the SeekBar is changed
+        }
+    }
+
+    // Check for inactivity in the UI thread every second
+    private fun checkSeekBarInactivity() {
+        if (!isSystemChange) return // Only check if the change was from the system
+
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastSystemChangeTime > SEEK_BAR_TIMEOUT) {
+            // 5 seconds have passed since the last system change
+            // Trigger the action you want to perform
+            if (isSystemChange) {
+                onNoSignal() // Trigger the action only once after the inactivity period
+                isSystemChange = false // Reset flag after triggering the action
+            }
+        }
+    }
+
+    // Periodically check for inactivity caused by system changes
+    private fun startInactivityCheck() {
+        handler.postDelayed(object : Runnable {
+            override fun run() {
+                checkSeekBarInactivity()
+                handler.postDelayed(this, 1000) // Re-run every second
+            }
+        }, 1000) // Start immediately
+    }
+
+    private fun onNoSignal() {
+        binding.root.visibility = View.INVISIBLE
+        Log.i("sometag","start show no signal")
+    }
+
+    private fun onSignal() {
+        binding.root.visibility = View.VISIBLE
+        Log.i("sometag","stop show no signal")
     }
 
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
@@ -239,6 +314,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
             cycleDecoderBtn.setOnLongClickListener { pickDecoder(); true }
 
             playbackSeekbar.setOnSeekBarChangeListener(seekBarChangeListener)
+            startInactivityCheck()
         }
 
         player.setOnTouchListener { _, e ->
@@ -275,6 +351,8 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
 
     override fun onCreate(icicle: Bundle?) {
         super.onCreate(icicle)
+        window.setBackgroundDrawableResource(android.R.color.transparent)
+
 
         // Do these here and not in MainActivity because mpv can be launched from a file browser
         Utils.copyAssets(this)
@@ -320,7 +398,7 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         if (filepath == null) {
             Log.e(TAG, "No file given, exiting")
             showToast(getString(R.string.error_no_file))
-            finishWithResult(RESULT_CANCELED)
+            finishWithResult(RESULT_OK)
             return
         }
 
@@ -1820,9 +1898,53 @@ class MPVActivity : AppCompatActivity(), MPVLib.EventObserver, TouchGesturesObse
         eventUiHandler.post { eventPropertyUi(property, value, metaUpdated) }
     }
 
+    private var timer: Timer? = null
+    private var lastCalledId: Int? = null
+
+    private fun startTimer() {
+        // If there's an existing timer, cancel it
+        cancelTimer()
+
+        // Store the id when the timer is started
+        lastCalledId = 8
+
+        // Create a new timer and schedule a task to run after 10 seconds
+        timer = Timer()
+
+        // Timer task to run after 10 seconds
+        timer?.schedule(object : TimerTask() {
+            override fun run() {
+                // This code will execute after 10 seconds if the function hasn't been called again with id 8 or 21
+                if (lastCalledId == MPVLib.mpvEventId.MPV_EVENT_FILE_LOADED) {
+                    finishWithResult(RESULT_CANCELED)
+                }
+            }
+        }, 10000) // 10000 ms = 10 seconds
+    }
+
+    private fun cancelTimer() {
+        // If function was called with id 21 or any other id, cancel the timer
+        lastCalledId = null
+        timer?.cancel()
+        timer = null
+    }
+
     override fun event(eventId: Int) {
-        if (eventId == MPVLib.mpvEventId.MPV_EVENT_SHUTDOWN)
-            finishWithResult(if (playbackHasStarted) RESULT_OK else RESULT_CANCELED)
+
+        if (eventId == MPVLib.mpvEventId.MPV_EVENT_FILE_LOADED) {
+            lastCalledId = eventId
+            startTimer()
+        }
+
+        if (lastCalledId == MPVLib.mpvEventId.MPV_EVENT_FILE_LOADED &&
+            eventId == MPVLib.mpvEventId.MPV_EVENT_PLAYBACK_RESTART) {
+            cancelTimer()
+        }
+
+        if (eventId == MPVLib.mpvEventId.MPV_EVENT_SHUTDOWN) {
+            finishWithResult(RESULT_CANCELED)
+        }
+
 
         if (eventId == MPVLib.mpvEventId.MPV_EVENT_START_FILE) {
             for (c in onloadCommands)

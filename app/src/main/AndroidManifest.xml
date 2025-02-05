@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="auto">
 
     <uses-feature
@@ -26,7 +27,8 @@
         android:banner="@mipmap/ic_banner"
         android:label="@string/mpv_activity"
         android:appCategory="video"
-        android:localeConfig="@xml/locales_config">
+        android:localeConfig="@xml/locales_config"
+        tools:targetApi="tiramisu">
 
         <!-- Multi-window support on some devices -->
         <meta-data android:name="com.samsung.android.sdk.multiwindow.enable"
@@ -41,7 +43,7 @@
             android:launchMode="singleTask"
             android:alwaysRetainTaskState="true"
             android:autoRemoveFromRecents="true"
-            android:theme="@style/AppTheme"
+            android:theme="@style/Transparent"
             android:exported="true">
             <intent-filter> <!-- Media protocols -->
                 <action android:name="android.intent.action.VIEW" />
@@ -83,7 +85,7 @@
                 <data android:mimeType="audio/*" />
                 <data android:mimeType="application/vnd.apple.mpegurl" />
             </intent-filter>
-            <intent-filter> <!-- HTTP(S) with extension (e.g. Chrome) -->
+            <intent-filter tools:ignore="AppLinkWarning"> <!-- HTTP(S) with extension (e.g. Chrome) -->
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -195,11 +197,22 @@
         </activity>
 
         <activity
+            android:name=".PlayerActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize"
+            android:supportsPictureInPicture="true"
+            android:launchMode="singleTask"
+            android:alwaysRetainTaskState="true"
+            android:autoRemoveFromRecents="true"
+            android:theme="@style/AppTheme"
+            android:exported="true" />
+
+        <activity
             android:name=".FilePickerActivity"
             android:configChanges="orientation|screenSize"
             android:screenOrientation="behind"
             android:theme="@style/FilePickerThemeSpecial"
-            android:exported="false" />
+            android:exported="false"
+            tools:ignore="DiscouragedApi" />
 
         <activity
             android:name=".preferences.PreferenceActivity"

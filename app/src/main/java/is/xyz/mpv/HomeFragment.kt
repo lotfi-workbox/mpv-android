@@ -1,31 +1,18 @@
 package `is`.xyz.mpv
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import com.google.android.material.bottomnavigation.BottomNavigationView
 
 class HomeFragment : Fragment(R.layout.fragment_home) {
 
-    private lateinit var playerLauncher: ActivityResultLauncher<Intent>
     private lateinit var bottomNavigationView: BottomNavigationView
     private lateinit var fragmentContainer: FrameLayout
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        playerLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            // we don't care about the result but remember that we've been here
-//            returningFromPlayer = true
-//            Log.v(TAG, "returned from player")
-        }
-    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -44,6 +31,7 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         }
 
         // Handle Bottom Navigation item selection
+        @Suppress("DEPRECATION")
         bottomNavigationView.setOnNavigationItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_home -> {
@@ -51,7 +39,9 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
                     true
                 }
                 R.id.nav_player -> {
-                    playFile("rtsp://10.42.0.1:8554/stream0")
+                    val intent = Intent(requireContext(), PlayerActivity::class.java)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    startActivity(intent)
                     false
                 }
                 else -> false
@@ -66,17 +56,5 @@ class HomeFragment : Fragment(R.layout.fragment_home) {
         childFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
             .commit()
-    }
-
-    private fun playFile(filepath: String) {
-        val i: Intent
-        if (filepath.startsWith("content://")) {
-            i = Intent(Intent.ACTION_VIEW, Uri.parse(filepath))
-        } else {
-            i = Intent()
-            i.putExtra("filepath", filepath)
-        }
-        i.setClass(requireContext(), MPVActivity::class.java)
-        playerLauncher.launch(i)
     }
 }
